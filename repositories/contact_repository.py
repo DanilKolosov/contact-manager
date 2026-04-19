@@ -4,7 +4,7 @@ from models.contact import Contact, Category
 
 
 class ContactRepository:
-    """Репозиторий — отвечает только за работу с БД (Repository Pattern)"""
+    """Репозиторий для работы с базой данных (без email)"""
 
     def __init__(self, db_name: str = "contacts.db"):
         self.conn = sqlite3.connect(db_name)
@@ -17,7 +17,6 @@ class ContactRepository:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 phone TEXT,
-                email TEXT,
                 category TEXT NOT NULL,
                 notes TEXT
             )
@@ -26,9 +25,9 @@ class ContactRepository:
 
     def add(self, contact: Contact) -> int:
         self.cursor.execute('''
-            INSERT INTO contacts (name, phone, email, category, notes)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (contact.name, contact.phone, contact.email, contact.category.value, contact.notes))
+            INSERT INTO contacts (name, phone, category, notes)
+            VALUES (?, ?, ?, ?)
+        ''', (contact.name, contact.phone, contact.category.value, contact.notes))
         self.conn.commit()
         return self.cursor.lastrowid
 
@@ -46,9 +45,9 @@ class ContactRepository:
             return
         self.cursor.execute('''
             UPDATE contacts 
-            SET name=?, phone=?, email=?, category=?, notes=?
+            SET name=?, phone=?, category=?, notes=?
             WHERE id=?
-        ''', (contact.name, contact.phone, contact.email, contact.category.value, contact.notes, contact.id))
+        ''', (contact.name, contact.phone, contact.category.value, contact.notes, contact.id))
         self.conn.commit()
 
     def delete(self, contact_id: int):
@@ -59,8 +58,8 @@ class ContactRepository:
         q = f"%{query}%"
         self.cursor.execute('''
             SELECT * FROM contacts 
-            WHERE name LIKE ? OR phone LIKE ? OR email LIKE ?
-        ''', (q, q, q))
+            WHERE name LIKE ? OR phone LIKE ?
+        ''', (q, q))
         return [Contact.from_row(row) for row in self.cursor.fetchall()]
 
     def get_by_category(self, category: Category) -> list[Contact]:
@@ -70,7 +69,7 @@ class ContactRepository:
     def export_to_csv(self, filename: str):
         contacts = self.get_all()
         with open(filename, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=["id", "name", "phone", "email", "category", "notes"])
+            writer = csv.DictWriter(f, fieldnames=["id", "name", "phone", "category", "notes"])
             writer.writeheader()
             for c in contacts:
                 writer.writerow(c.to_dict())
@@ -83,10 +82,9 @@ class ContactRepository:
                     contact = Contact(
                         name=row["name"],
                         phone=row.get("phone", ""),
-                        email=row.get("email", ""),
                         category=Category(row["category"]),
                         notes=row.get("notes", "")
                     )
                     self.add(contact)
                 except Exception as e:
-                    print(f"Ошибка импорта строки {row}: {e}")
+                    print(f"Ошибка импорта строки: {e}")

@@ -8,11 +8,15 @@ class ContactService:
     def __init__(self, repository: ContactRepository):
         self.repository = repository
 
-    def add_contact(self, name: str, phone: str, email: str, category: Category, notes: str = "") -> Contact:
+    def add_contact(self, name: str, phone: str, category: Category, notes: str = "") -> Contact:
         if not name.strip():
             raise ValueError("Имя контакта обязательно!")
-        contact = Contact(name=name.strip(), phone=phone.strip(), email=email.strip(),
-                          category=category, notes=notes.strip())
+        contact = Contact(
+            name=name.strip(), 
+            phone=phone.strip(), 
+            category=category, 
+            notes=notes.strip()
+        )
         contact.id = self.repository.add(contact)
         return contact
 

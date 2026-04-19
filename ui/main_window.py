@@ -1,205 +1,224 @@
-import tkinter as tk
-from tkinter import messagebox, filedialog
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTableWidget, QTableWidgetItem, QLabel, QLineEdit, QPushButton,
+    QComboBox, QTextEdit, QMessageBox, QFileDialog, QHeaderView
+)
+from PyQt6.QtCore import Qt
 from models.contact import Contact, Category
 from services.contact_service import ContactService
 from repositories.contact_repository import ContactRepository
+import sys
 
 
-class ContactManagerApp:
+class ContactManagerApp(QMainWindow):
     def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Менеджер контактов — PyQt6")
+        self.resize(950, 620)
+
         self.repo = ContactRepository()
         self.service = ContactService(self.repo)
 
-        self.root = tk.Tk()
-        self.root.title("Менеджер контактов")
-        self.root.geometry("900x600")
-
         self.current_contact: Contact | None = None
-        self.contacts_cache: list[Contact] = []
 
-        self._create_widgets()
+        self._create_ui()
         self.load_contacts()
 
-    def _create_widgets(self):
-        # Список контактов
-        list_frame = tk.Frame(self.root)
-        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+    def _create_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
 
-        tk.Label(list_frame, text="Контакты", font=("Arial", 14, "bold")).pack(anchor="w")
-        self.contact_list = tk.Listbox(list_frame, width=60, height=25, font=("Arial", 11))
-        self.contact_list.pack(fill=tk.BOTH, expand=True)
-        self.contact_list.bind('<<ListboxSelect>>', self.on_select)
+        # Левая часть — таблица
+        left_layout = QVBoxLayout()
 
-        # Панель деталей
-        detail_frame = tk.Frame(self.root, padx=10, pady=10)
-        detail_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Поиск по имени или телефону...")
+        self.search_input.textChanged.connect(self.search_contacts)
 
-        fields = [
-            ("Имя:", "name_entry"),
-            ("Телефон:", "phone_entry"),
-            ("Email:", "email_entry")
-        ]
-        for i, (label, attr) in enumerate(fields):
-            tk.Label(detail_frame, text=label).grid(row=i, column=0, sticky="w", pady=5)
-            setattr(self, attr, tk.Entry(detail_frame, width=40))
-            getattr(self, attr).grid(row=i, column=1, pady=5)
+        self.category_filter = QComboBox()
+        self.category_filter.addItem("Все категории")
+        for cat in Category:
+            self.category_filter.addItem(cat.value)
+        self.category_filter.currentTextChanged.connect(self.filter_by_category)
 
-        tk.Label(detail_frame, text="Категория:").grid(row=3, column=0, sticky="w", pady=5)
-        self.category_var = tk.StringVar(value=Category.FRIENDS.value)
-        self.category_combo = tk.OptionMenu(detail_frame, self.category_var,
-                                            *[c.value for c in Category])
-        self.category_combo.grid(row=3, column=1, sticky="ew", pady=5)
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Имя", "Телефон", "Категория", "Заметки"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.itemSelectionChanged.connect(self.on_table_select)
 
-        tk.Label(detail_frame, text="Заметки:").grid(row=4, column=0, sticky="nw", pady=5)
-        self.notes_text = tk.Text(detail_frame, width=40, height=6)
-        self.notes_text.grid(row=4, column=1, pady=5)
+        left_layout.addWidget(QLabel("Поиск:"))
+        left_layout.addWidget(self.search_input)
+        left_layout.addWidget(QLabel("Фильтр по категории:"))
+        left_layout.addWidget(self.category_filter)
+        left_layout.addWidget(self.table)
 
-        # Кнопки
-        btn_frame = tk.Frame(detail_frame)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=15)
+        # Правая часть — форма
+        right_layout = QVBoxLayout()
 
-        tk.Button(btn_frame, text="Добавить", width=12, command=self.add_contact).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Обновить", width=12, command=self.update_contact).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Удалить", width=12, command=self.delete_contact).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Очистить", width=12, command=self.clear_form).pack(side=tk.LEFT, padx=5)
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Имя контакта")
 
-        # Поиск и фильтр
-        search_frame = tk.Frame(self.root)
-        search_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.phone_edit = QLineEdit()
+        self.phone_edit.setPlaceholderText("Телефон")
 
-        tk.Label(search_frame, text="Поиск:").pack(side=tk.LEFT)
-        self.search_entry = tk.Entry(search_frame, width=30)
-        self.search_entry.pack(side=tk.LEFT, padx=5)
-        tk.Button(search_frame, text="Найти", command=self.search).pack(side=tk.LEFT, padx=5)
-        tk.Button(search_frame, text="Все", command=self.load_contacts).pack(side=tk.LEFT, padx=5)
+        self.category_combo = QComboBox()
+        for cat in Category:
+            self.category_combo.addItem(cat.value)
 
-        self.filter_var = tk.StringVar(value="Все")
-        tk.Label(search_frame, text="Фильтр:").pack(side=tk.LEFT, padx=(20, 5))
-        filter_menu = tk.OptionMenu(search_frame, self.filter_var, "Все",
-                                    *[c.value for c in Category],
-                                    command=lambda _: self.filter_by_category())
-        filter_menu.pack(side=tk.LEFT)
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setPlaceholderText("Заметки...")
 
-        # Импорт/Экспорт
-        io_frame = tk.Frame(self.root)
-        io_frame.pack(fill=tk.X, padx=10, pady=10)
-        tk.Button(io_frame, text="Экспорт в CSV", command=self.export).pack(side=tk.LEFT, padx=5)
-        tk.Button(io_frame, text="Импорт из CSV", command=self.import_data).pack(side=tk.LEFT, padx=5)
+        btn_layout = QHBoxLayout()
+        self.add_btn = QPushButton("Добавить")
+        self.update_btn = QPushButton("Обновить")
+        self.delete_btn = QPushButton("Удалить")
+        self.clear_btn = QPushButton("Очистить")
+
+        self.add_btn.clicked.connect(self.add_contact)
+        self.update_btn.clicked.connect(self.update_contact)
+        self.delete_btn.clicked.connect(self.delete_contact)
+        self.clear_btn.clicked.connect(self.clear_form)
+
+        btn_layout.addWidget(self.add_btn)
+        btn_layout.addWidget(self.update_btn)
+        btn_layout.addWidget(self.delete_btn)
+        btn_layout.addWidget(self.clear_btn)
+
+        io_layout = QHBoxLayout()
+        export_btn = QPushButton("Экспорт в CSV")
+        import_btn = QPushButton("Импорт из CSV")
+        export_btn.clicked.connect(self.export_contacts)
+        import_btn.clicked.connect(self.import_contacts)
+        io_layout.addWidget(export_btn)
+        io_layout.addWidget(import_btn)
+
+        right_layout.addWidget(QLabel("Имя:"))
+        right_layout.addWidget(self.name_edit)
+        right_layout.addWidget(QLabel("Телефон:"))
+        right_layout.addWidget(self.phone_edit)
+        right_layout.addWidget(QLabel("Категория:"))
+        right_layout.addWidget(self.category_combo)
+        right_layout.addWidget(QLabel("Заметки:"))
+        right_layout.addWidget(self.notes_edit)
+        right_layout.addLayout(btn_layout)
+        right_layout.addLayout(io_layout)
+        right_layout.addStretch()
+
+        main_layout.addLayout(left_layout, 2)
+        main_layout.addLayout(right_layout, 1)
 
     def load_contacts(self, contacts: list[Contact] | None = None):
-        self.contact_list.delete(0, tk.END)
         if contacts is None:
             contacts = self.service.get_all_contacts()
+
+        self.table.setRowCount(0)
+        self.table.setRowCount(len(contacts))
+
+        for row, contact in enumerate(contacts):
+            self.table.setItem(row, 0, QTableWidgetItem(contact.name))
+            self.table.setItem(row, 1, QTableWidgetItem(contact.phone))
+            self.table.setItem(row, 2, QTableWidgetItem(contact.category.value))
+            self.table.setItem(row, 3, QTableWidgetItem(contact.notes[:60] + "..." if len(contact.notes) > 60 else contact.notes))
+
         self.contacts_cache = contacts
 
-        for contact in contacts:
-            text = f"{contact.name}  •  {contact.category.value}  •  {contact.phone}"
-            self.contact_list.insert(tk.END, text)
-
-    def on_select(self, event):
-        selection = self.contact_list.curselection()
-        if not selection:
+    def on_table_select(self):
+        selected = self.table.selectedItems()
+        if not selected:
             return
-        idx = selection[0]
-        contact = self.contacts_cache[idx]
+        row = selected[0].row()
+        contact = self.contacts_cache[row]
         self.current_contact = contact
 
-        # заполняем форму
-        self.name_entry.delete(0, tk.END)
-        self.name_entry.insert(0, contact.name)
-        self.phone_entry.delete(0, tk.END)
-        self.phone_entry.insert(0, contact.phone)
-        self.email_entry.delete(0, tk.END)
-        self.email_entry.insert(0, contact.email)
-        self.category_var.set(contact.category.value)
-        self.notes_text.delete(1.0, tk.END)
-        self.notes_text.insert(tk.END, contact.notes)
+        self.name_edit.setText(contact.name)
+        self.phone_edit.setText(contact.phone)
+        self.category_combo.setCurrentText(contact.category.value)
+        self.notes_edit.setText(contact.notes)
 
     def add_contact(self):
         try:
-            cat = next(c for c in Category if c.value == self.category_var.get())
+            cat = next(c for c in Category if c.value == self.category_combo.currentText())
             contact = self.service.add_contact(
-                name=self.name_entry.get(),
-                phone=self.phone_entry.get(),
-                email=self.email_entry.get(),
+                name=self.name_edit.text(),
+                phone=self.phone_edit.text(),
                 category=cat,
-                notes=self.notes_text.get(1.0, tk.END).strip()
+                notes=self.notes_edit.toPlainText()
             )
-            messagebox.showinfo("Готово", f"Контакт «{contact.name}» добавлен!")
+            QMessageBox.information(self, "Успех", f"Контакт «{contact.name}» добавлен!")
             self.load_contacts()
             self.clear_form()
         except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
+            QMessageBox.warning(self, "Ошибка", str(e))
 
     def update_contact(self):
         if not self.current_contact or not self.current_contact.id:
-            messagebox.showerror("Ошибка", "Выберите контакт для редактирования")
+            QMessageBox.warning(self, "Ошибка", "Выберите контакт для редактирования")
             return
         try:
-            cat = next(c for c in Category if c.value == self.category_var.get())
-            self.current_contact.name = self.name_entry.get().strip()
-            self.current_contact.phone = self.phone_entry.get().strip()
-            self.current_contact.email = self.email_entry.get().strip()
+            cat = next(c for c in Category if c.value == self.category_combo.currentText())
+            self.current_contact.name = self.name_edit.text().strip()
+            self.current_contact.phone = self.phone_edit.text().strip()
             self.current_contact.category = cat
-            self.current_contact.notes = self.notes_text.get(1.0, tk.END).strip()
+            self.current_contact.notes = self.notes_edit.toPlainText().strip()
 
             self.service.update_contact(self.current_contact)
-            messagebox.showinfo("Готово", "Контакт обновлён!")
+            QMessageBox.information(self, "Успех", "Контакт обновлён!")
             self.load_contacts()
             self.clear_form()
         except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
+            QMessageBox.critical(self, "Ошибка", str(e))
 
     def delete_contact(self):
-        if not self.current_contact or not self.current_contact.id:
-            messagebox.showerror("Ошибка", "Выберите контакт для удаления")
+        if not self.current_contact:
+            QMessageBox.warning(self, "Ошибка", "Выберите контакт")
             return
-        if messagebox.askyesno("Подтверждение", f"Удалить контакт «{self.current_contact.name}»?"):
+        reply = QMessageBox.question(self, "Подтверждение", f"Удалить «{self.current_contact.name}»?")
+        if reply == QMessageBox.StandardButton.Yes:
             self.service.delete_contact(self.current_contact.id)
-            messagebox.showinfo("Готово", "Контакт удалён")
+            QMessageBox.information(self, "Успех", "Контакт удалён")
             self.load_contacts()
             self.clear_form()
 
     def clear_form(self):
-        self.name_entry.delete(0, tk.END)
-        self.phone_entry.delete(0, tk.END)
-        self.email_entry.delete(0, tk.END)
-        self.notes_text.delete(1.0, tk.END)
-        self.category_var.set(Category.FRIENDS.value)
+        self.name_edit.clear()
+        self.phone_edit.clear()
+        self.notes_edit.clear()
+        self.category_combo.setCurrentIndex(0)
         self.current_contact = None
+        self.table.clearSelection()
 
-    def search(self):
-        query = self.search_entry.get().strip()
-        contacts = self.service.search_contacts(query) if query else None
+    def search_contacts(self):
+        query = self.search_input.text().strip()
+        contacts = self.service.search_contacts(query) if query else self.service.get_all_contacts()
         self.load_contacts(contacts)
 
     def filter_by_category(self):
-        value = self.filter_var.get()
-        if value == "Все":
+        value = self.category_filter.currentText()
+        if value == "Все категории":
             self.load_contacts()
         else:
             cat = next(c for c in Category if c.value == value)
             contacts = self.service.get_contacts_by_category(cat)
             self.load_contacts(contacts)
 
-    def export(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".csv",
-                                                filetypes=[("CSV files", "*.csv")])
+    def export_contacts(self):
+        filename, _ = QFileDialog.getSaveFileName(self, "Экспорт в CSV", "", "CSV Files (*.csv)")
         if filename:
             self.service.export_contacts(filename)
-            messagebox.showinfo("Готово", "Контакты экспортированы!")
+            QMessageBox.information(self, "Успех", "Экспорт завершён!")
 
-    def import_data(self):
-        filename = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+    def import_contacts(self):
+        filename, _ = QFileDialog.getOpenFileName(self, "Импорт из CSV", "", "CSV Files (*.csv)")
         if filename:
             self.service.import_contacts(filename)
-            messagebox.showinfo("Готово", "Контакты импортированы!")
+            QMessageBox.information(self, "Успех", "Импорт завершён!")
             self.load_contacts()
-
-    def run(self):
-        self.root.mainloop()
 
 
 if __name__ == "__main__":
-    app = ContactManagerApp()
-    app.run()
+    app = QApplication(sys.argv)
+    window = ContactManagerApp()
+    window.show()
+    sys.exit(app.exec())
