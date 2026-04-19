@@ -7,4 +7,3 @@ if __name__ == "__main__":
     window = ContactManagerApp()
     window.show()
     sys.exit(app.exec())
-    
