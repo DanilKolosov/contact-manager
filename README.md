@@ -14,9 +14,19 @@
 - PyQt 
 - SQLite3 (база данных)
 - csv (импорт/экспорт)
+  
+## Скриншоты
+<img width="975" height="669" alt="Снимок экрана 2026-04-19 185935" src="https://github.com/user-attachments/assets/c7576f12-5e4a-4be4-906f-37076684c438" />
+
+
+
+## Запуск приложения
+-	Установить Python 3.10+
+-	Установить PyQt6: pip install PyQt6
+-	Запустить файл main.py
 
 ## Архитектура
-Layered Architecture + Repository Pattern + Service Layer (см. раздел "Проектирование" в отчёте).
+Layered Architecture + Repository Pattern + Service Layer.
 
 ## Запуск
 ```bash
