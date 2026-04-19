@@ -216,7 +216,6 @@ class ContactManagerApp(QMainWindow):
             QMessageBox.information(self, "Успех", "Импорт завершён!")
             self.load_contacts()
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ContactManagerApp()
