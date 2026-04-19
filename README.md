@@ -15,7 +15,7 @@
 - SQLite3 (база данных)
 - csv (импорт/экспорт)
   
-## Скриншоты
+## Скриншот
 <img width="975" height="669" alt="Снимок экрана 2026-04-19 185935" src="https://github.com/user-attachments/assets/c7576f12-5e4a-4be4-906f-37076684c438" />
 
 
