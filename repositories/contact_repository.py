@@ -88,3 +88,5 @@ class ContactRepository:
                     self.add(contact)
                 except Exception as e:
                     print(f"Ошибка импорта строки: {e}")
+                    
+                    

@@ -1,7 +1,6 @@
 from repositories.contact_repository import ContactRepository
 from models.contact import Contact, Category
 
-
 class ContactService:
     """Сервисный слой — бизнес-логика и валидация (Dependency Injection)"""
 
@@ -40,3 +39,5 @@ class ContactService:
 
     def import_contacts(self, filename: str):
         self.repository.import_from_csv(filename)
+        
+        
